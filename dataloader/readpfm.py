@@ -36,6 +36,6 @@ def readPFM(file):
     data = np.fromfile(file, endian + 'f')
     shape = (height, width, 3) if color else (height, width)
 
-    data = np.reshape(data, shape)
-    data = np.flipud(data)
+    data = np.reshape(data, shape)  # reshape into height * width
+    data = np.flipud(data)  # row reversed
     return data, scale
