@@ -9,3 +9,4 @@ flags.DEFINE_string('model', 'basic', 'Types of model')
 flags.DEFINE_string('datapath', 'dataset/', 'datasets')
 flags.DEFINE_string('model_dir', 'model', 'Trained network')
 flags.DEFINE_string('load_model_dir', 'model', 'Load pretrained network')
+
