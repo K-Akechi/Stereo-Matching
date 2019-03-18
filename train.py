@@ -1,6 +1,5 @@
 import tensorflow as tf
 
-
 flags = tf.app.flags
 
 flags.DEFINE_integer('batch_size', 8, 'Batch size')
