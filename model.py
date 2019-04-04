@@ -4,12 +4,14 @@ import params
 
 batch_size = params.batch_size
 disparity_range = params.max_disparity
+height = params.target_h
+width = params.target_w
 
 def residual_block(image):
     layer1 = tf.layers.conv2d(image, filters=32, kernel_size=3, padding='same')
     layer1 = tf.nn.leaky_relu(tf.layers.batch_normalization(layer1))
     layer2 = tf.layers.conv2d(layer1, filters=32, kernel_size=3, padding='same')
-    return tf.nn.leaky_relu(image + layer2)
+    return tf.nn.leaky_relu(tf.batch_normalization(image + layer2))
 
 
 def siamese_network(image):
@@ -24,9 +26,21 @@ def siamese_network(image):
     return layer
 
 
+def cost_volumn(left_features, right_features):
+    cost_volumn_list = []
+    left_features = tf.squeeze(left_features)
+    right_features = tf.squeeze(right_features)
+    for disp in range((disparity_range + 1) // 8):
+        paddings = [[0,0], [disp,0], [0,0]]
+        for k in range(32):
+            left_feature = tf.slice(left_features,  [0, 0, k], [height//2, width//2, 1])
+            right_feature = tf.slice(right_features, [0, 0, k], [height//2, width//2, 1])
+
+
+'''
 def cost_volume(left_image, right_image):
     cost_volume_list = []
-    constant_disp_shape = right_image.get_shape().as_list()
+    constant_disp_shape = right_image.get_shape().as_list()#返回张量的shape
 
     for disp in range(disparity_range):
         right_moved = image_bias_move_v2(right_image, tf.constant(disp, dtype=tf.float32, shape=constant_disp_shape))
@@ -87,3 +101,5 @@ def image_bias_move_v2(image, disparity_map):
     new_image = weight_low * tf.gather(n_image, index_arr_low) + weight_high * tf.gather(n_image, index_arr_high)
 
     return tf.reshape(new_image, image.get_shape())[:, :, 1: -1, :]
+'''
+
