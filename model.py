@@ -26,15 +26,29 @@ def siamese_network(image):
     return layer
 
 
-def cost_volumn(left_features, right_features):
+def cost_volumn(left_features, right_features, method="subtract"):
     cost_volumn_list = []
-    left_features = tf.squeeze(left_features)
-    right_features = tf.squeeze(right_features)
     for disp in range((disparity_range + 1) // 8):
-        paddings = [[0,0], [disp,0], [0,0]]
+        paddings = [[0, 0], [0, 0], [disp, 0], [0, 0]]
         for k in range(32):
-            left_feature = tf.slice(left_features,  [0, 0, k], [height//2, width//2, 1])
-            right_feature = tf.slice(right_features, [0, 0, k], [height//2, width//2, 1])
+            left_feature = tf.slice(left_features,  [0, 0, 0, k], [height//8, width//8, 1])
+            right_feature = tf.slice(right_features, [0, 0, 0, k], [height//8, width//8, 1])
+            right_feature = tf.slice(right_feature, [0, 0, disp, 0], [height//8, width//8 - disp, 1])
+            right_feature = tf.pad(right_feature, paddings, "CONSTANT")
+#            cost_volumn_list.append(left_feature)
+            if method == "subtractt":
+                cost_volumn_list.append(left_feature - right_feature)
+            else:
+                cost_volumn_list.append(left_feature)
+                cost_volumn_list.append(right_feature)
+    cost_volumn_list = tf.stack(cost_volumn_list)
+    cost_volumn_list = tf.reshape(cost_volumn_list, shape=(batch_size, (disparity_range+1)//8, 32, height//8, width//8))
+
+    return cost_volumn_list
+
+def loss_fun():
+    return
+
 
 
 '''
