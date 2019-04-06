@@ -2,17 +2,17 @@ import tensorflow as tf
 import numpy as np
 import params
 
-channels = 3
 batch_size = params.batch_size
 disparity_range = params.max_disparity
 height = params.target_h
 width = params.target_w
 
+
 def residual_block(image):
     layer1 = tf.layers.conv2d(image, filters=32, kernel_size=3, padding='same')
     layer1 = tf.nn.leaky_relu(tf.layers.batch_normalization(layer1))
     layer2 = tf.layers.conv2d(layer1, filters=32, kernel_size=3, padding='same')
-    return tf.nn.leaky_relu(tf.batch_normalization(image + layer2))
+    return tf.nn.leaky_relu(tf.layers.batch_normalization(image + layer2))
 
 
 def siamese_network(image):
@@ -32,26 +32,42 @@ def cost_volumn(left_features, right_features, method="subtract"):
     for disp in range((disparity_range + 1) // 8):
         paddings = [[0, 0], [0, 0], [disp, 0], [0, 0]]
         for k in range(32):
-            left_feature = tf.slice(left_features,  [0, 0, 0, k], [height//8, width//8, 1])
-            right_feature = tf.slice(right_features, [0, 0, 0, k], [height//8, width//8, 1])
-            right_feature = tf.slice(right_feature, [0, 0, disp, 0], [height//8, width//8 - disp, 1])
+            left_feature = tf.slice(left_features, [0, 0, 0, k], [height // 8, width // 8, 1])
+            right_feature = tf.slice(right_features, [0, 0, 0, k], [height // 8, width // 8, 1])
+            right_feature = tf.slice(right_feature, [0, 0, disp, 0], [height // 8, width // 8 - disp, 1])
             right_feature = tf.pad(right_feature, paddings, "CONSTANT")
-#            cost_volumn_list.append(left_feature)
+            #            cost_volumn_list.append(left_feature)
             if method == "subtract":
                 cost_volumn_list.append(left_feature - right_feature)
             else:
                 cost_volumn_list.append(left_feature)
                 cost_volumn_list.append(right_feature)
     cost_volumn_list = tf.stack(cost_volumn_list)
-    cost_volumn_list = tf.reshape(cost_volumn_list, shape=(batch_size, (disparity_range+1)//8, 32, height//8, width//8))
+    cost_volumn_list = tf.reshape(cost_volumn_list,
+                                  shape=(batch_size, (disparity_range + 1) // 8, 32, height // 8, width // 8))
     cost_volumn_list = tf.transpose(cost_volumn_list, [0, 1, 3, 4, 2])
     return cost_volumn_list
 
+
 def loss_fun(left_image, right_image, disparity_map):
-    reconstruction_left = np.zeros(batch_size, height, width, channels)
-    
+    reconstruction_left = np.zeros(batch_size, height, width, 3)
+
     return
 
+
+def StereoNet(image_L, image_R):
+    with tf.variable_scope('first_part', reuse=tf.AUTO_REUSE):
+        left_siamese = siamese_network(image_L)
+        right_siamese = siamese_network(image_R)
+
+    with tf.variable_scope('second_part', reuse=tf.AUTO_REUSE):
+        cost_v = cost_volumn(left_siamese, right_siamese)
+        for i in range(4):
+            cost_v = tf.layers.conv3d(cost_v, filters=32, kernel_size=3, padding='same', strides=1)
+            cost_v = tf.nn.leaky_relu(tf.layers.batch_normalization(cost_v))
+        cost_v = tf.layers.conv3d(cost_v, filters=1, kernel_size=3, padding='same', strides=1)
+
+    return
 
 
 '''
@@ -119,4 +135,3 @@ def image_bias_move_v2(image, disparity_map):
 
     return tf.reshape(new_image, image.get_shape())[:, :, 1: -1, :]
 '''
-
