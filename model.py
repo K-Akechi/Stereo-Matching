@@ -1,7 +1,8 @@
 import tensorflow as tf
+import numpy as np
 import params
 
-
+channels = 3
 batch_size = params.batch_size
 disparity_range = params.max_disparity
 height = params.target_h
@@ -36,17 +37,19 @@ def cost_volumn(left_features, right_features, method="subtract"):
             right_feature = tf.slice(right_feature, [0, 0, disp, 0], [height//8, width//8 - disp, 1])
             right_feature = tf.pad(right_feature, paddings, "CONSTANT")
 #            cost_volumn_list.append(left_feature)
-            if method == "subtractt":
+            if method == "subtract":
                 cost_volumn_list.append(left_feature - right_feature)
             else:
                 cost_volumn_list.append(left_feature)
                 cost_volumn_list.append(right_feature)
     cost_volumn_list = tf.stack(cost_volumn_list)
     cost_volumn_list = tf.reshape(cost_volumn_list, shape=(batch_size, (disparity_range+1)//8, 32, height//8, width//8))
-
+    cost_volumn_list = tf.transpose(cost_volumn_list, [0, 1, 3, 4, 2])
     return cost_volumn_list
 
-def loss_fun():
+def loss_fun(left_image, right_image, disparity_map):
+    reconstruction_left = np.zeros(batch_size, height, width, channels)
+    
     return
 
 
