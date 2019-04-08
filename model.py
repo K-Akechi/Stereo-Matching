@@ -4,8 +4,8 @@ import train
 
 batch_size = train.batch_size
 disparity_range = (train.max_disparity + 1) // pow(2, 3)
-height = train.original_height
-width = train.original_width
+height = train.target_height
+width = train.target_width
 
 
 def residual_block(image, channels, stride, dilated):

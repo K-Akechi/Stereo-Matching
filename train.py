@@ -6,8 +6,10 @@ import argparse
 import model
 
 
-original_height = 960
-original_width = 540
+original_height = 540
+original_width = 960
+target_height = 256
+target_width = 512
 
 max_disparity = 192
 batch_size = 16
