@@ -1,11 +1,11 @@
 import tensorflow as tf
 import numpy as np
-import params
+import train
 
-batch_size = params.batch_size
-disparity_range = (params.max_disparity + 1) // pow(2, 3)
-height = params.original_h
-width = params.original_w
+batch_size = train.batch_size
+disparity_range = (train.max_disparity + 1) // pow(2, 3)
+height = train.original_height
+width = train.original_width
 
 
 def residual_block(image, channels, stride, dilated):
@@ -154,3 +154,23 @@ def stereonet(image_l, image_r):
         disp_res = tf.layers.conv2d(layer, filters=1, kernel_size=3, strides=1, padding='same')
 
     return tf.add(disp_map, disp_res)
+
+
+def invalidation_network(left_siamese, right_siamese, fullres_disp, left_input):
+    layer = tf.concat([left_siamese, right_siamese], axis=-1)
+    for i in range(5):
+        layer = residual_block(layer, 64, 1, 1)
+    layer = tf.layers.conv2d(layer, filters=1, kernel_size=3, strides=1, padding='same')
+    new_shape = layer.get_shape().as_list()
+    new_shape[1] *= 8
+    new_shape[2] *= 8
+    upsampled_invalid = tf.image.resize_images(layer, [new_shape[1], new_shape[2]])
+
+    layer2 = tf.concat([upsampled_invalid, fullres_disp, left_input], axis=-1)
+    layer2 = tf.layers.conv2d(layer2, filters=32, kernel_size=3, strides=1, padding='same')
+    layer2 = tf.nn.leaky_relu(tf.layers.batch_normalization(layer2))
+    for i in range(4):
+        layer2 = residual_block(layer2, 32, 1, 1)
+    invalid_res = tf.layers.conv2d(layer2, filters=1, kernel_size=3, strides=1, padding='same')
+
+    return tf.add(upsampled_invalid, invalid_res)
