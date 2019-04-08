@@ -3,8 +3,7 @@ import numpy as np
 import os, random, glob
 import scipy.misc as misc
 import argparse
-import  model
-import params
+import model
 
 
 original_height = 960
