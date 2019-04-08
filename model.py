@@ -3,14 +3,15 @@ import numpy as np
 import params
 
 batch_size = params.batch_size
-disparity_range = params.max_disparity
-height = params.target_h
-width = params.target_w
+disparity_range = (params.max_disparity + 1) // pow(2, 3)
+height = params.original_h
+width = params.original_w
 
-def residual_block(image):
-    layer1 = tf.layers.conv2d(image, filters=32, kernel_size=3, padding='same')
+
+def residual_block(image, channels, stride, dilated):
+    layer1 = tf.layers.conv2d(image, filters=channels, kernel_size=3, padding='same', strides=stride, dilation_rate=dilated)
     layer1 = tf.nn.leaky_relu(tf.layers.batch_normalization(layer1))
-    layer2 = tf.layers.conv2d(layer1, filters=32, kernel_size=3, padding='same')
+    layer2 = tf.layers.conv2d(layer1, filters=channels, kernel_size=3, padding='same', strides=stride, dilation_rate=dilated)
     return tf.nn.leaky_relu(tf.layers.batch_normalization(image + layer2))
 
 
@@ -18,7 +19,7 @@ def siamese_network(image):
     layer = image
     layer = tf.layers.conv2d(layer, filters=32, kernel_size=3, padding='same', strides=1)
     for i in range(3):
-        layer = residual_block(layer)
+        layer = residual_block(layer, 32, 1, 1)
     for i in range(3):
         layer = tf.layers.conv2d(layer, filters=32, kernel_size=3, padding='same', strides=2)
         layer = tf.nn.leaky_relu(tf.layers.batch_normalization(layer))
@@ -26,6 +27,7 @@ def siamese_network(image):
     return layer
 
 
+'''
 def cost_volumn(left_features, right_features, method="subtract"):
     cost_volumn_list = []
     for disp in range((disparity_range + 1) // 8):
@@ -45,30 +47,15 @@ def cost_volumn(left_features, right_features, method="subtract"):
     cost_volumn_list = tf.reshape(cost_volumn_list, shape=(batch_size, (disparity_range+1)//8, 32, height//8, width//8))
     cost_volumn_list = tf.transpose(cost_volumn_list, [0, 1, 3, 4, 2])
 
-
     return cost_volumn_list
 
 def loss_fun(left_image, right_image, disparity_map):
     reconstruction_left = np.zeros(batch_size, height, width, 3)
 
     return
-
-
-def StereoNet(image_L, image_R):
-    with tf.variable_scope('first_part', reuse=tf.AUTO_REUSE):
-        left_siamese = siamese_network(image_L)
-        right_siamese = siamese_network(image_R)
-
-    with tf.variable_scope('second_part', reuse=tf.AUTO_REUSE):
-        cost_v = cost_volumn(left_siamese, right_siamese)
-        for i in range(4):
-            cost_v = tf.layers.conv3d(cost_v, filters=32, kernel_size=3, padding='same', strides=1)
-            cost_v = tf.nn.leaky_relu(tf.layers.batch_normalization(cost_v))
-        cost_v = tf.layers.conv3d(cost_v, filters=1, kernel_size=3, padding='same', strides=1)
-    return
-
-
 '''
+
+
 def cost_volume(left_image, right_image):
     cost_volume_list = []
     constant_disp_shape = right_image.get_shape().as_list()#返回张量的shape
@@ -132,5 +119,38 @@ def image_bias_move_v2(image, disparity_map):
     new_image = weight_low * tf.gather(n_image, index_arr_low) + weight_high * tf.gather(n_image, index_arr_high)
 
     return tf.reshape(new_image, image.get_shape())[:, :, 1: -1, :]
-'''
 
+
+def stereonet(image_l, image_r):
+    with tf.variable_scope('first_part', reuse=tf.AUTO_REUSE):
+        left_siamese = siamese_network(image_l)
+        right_siamese = siamese_network(image_r)
+
+    with tf.variable_scope('second_part', reuse=tf.AUTO_REUSE):
+        disp_map = cost_volume(left_siamese, right_siamese)
+        new_shape = disp_map.get_shape().as_list()
+        new_shape[1] *= 8
+        new_shape[2] *= 8
+        disp_map = tf.image.resize_images(disp_map, [new_shape[1], new_shape[2]])
+
+    with tf.variable_scope('third_part', reuse=tf.AUTO_REUSE):
+        input_left = tf.layers.conv2d(image_l, filters=16, kernel_size=3, strides=1, padding='same')
+        input_left = tf.nn.leaky_relu(tf.layers.batch_normalization(input_left))
+        input_left = residual_block(input_left, 16, 1, 1)
+        input_left = residual_block(input_left, 16, 1, 2)
+
+        disp_map = tf.layers.conv2d(disp_map, filters=16, kernel_size=3, strides=1, padding='same')
+        disp_map = tf.nn.leaky_relu(tf.layers.batch_normalization(disp_map))
+        disp_map = residual_block(disp_map, 16, 1, 1)
+        disp_map = residual_block(disp_map, 16, 1, 2)
+
+        layer = tf.concat([input_left, disp_map], axis=-1)
+        layer = residual_block(layer, 32, 1, 4)
+        layer = residual_block(layer, 32, 1, 8)
+
+        for i in range(2):
+            layer = residual_block(layer, 32, 1, 1)
+
+        disp_res = tf.layers.conv2d(layer, filters=1, kernel_size=3, strides=1, padding='same')
+
+    return tf.add(disp_map, disp_res)
