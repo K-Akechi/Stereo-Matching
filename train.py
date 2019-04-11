@@ -90,6 +90,9 @@ def wlcn(left, left_rc):
 
 # window-based optimization
 def wb_optimization(left, wlcn):
+    left_slice = tf.unstack(left, axis=0)
+    wlcn_slice = tf.unstack(wlcn, axis=0)
+
 
     return
 
