@@ -28,7 +28,7 @@ train_dir = 'saved_model/'
 def loss_fun(left_input, right_input, disp_map):
     left_reconstructed = model.image_bias_move_v2(right_input, disp_map)
     left_wlcn = wlcn(left_input, left_reconstructed)
-    guassian_filter = tf.convert_to_tensor(util.get_gaussian_filter((9, 9, left_wlcn.get_shape()[3])))
+    guassian_filter = tf.convert_to_tensor(util.get_gaussian_filter((9, 9, left_wlcn.get_shape().as_list()[4], 1)))
     left_wlcn_slices = tf.unstack(left_wlcn, axis=0)
     loss = []
     for item in left_wlcn_slices:
@@ -64,7 +64,7 @@ def wlcn(left, left_rc):
     loss = left_lcn - left_rc_lcn
     loss_slices = tf.unstack(loss, axis=0)
     loss_s_deviation = []
-    guassian_filter = tf.convert_to_tensor(util.get_gaussian_filter((9, 9, shape[2])))
+    guassian_filter = tf.convert_to_tensor(util.get_gaussian_filter((9, 9, shape[2], 1)))
 
     for item in loss_slices:
         sum_square_loss = tf.nn.conv2d(tf.square(item), guassian_filter, [1, 1, 1, 1], padding='SAME')
@@ -99,7 +99,7 @@ def main(argv=None):
 
     saver = tf.train.Saver()
     summary_op = tf.summary.merge_all()
-    init = tf.initialize_all_variables()
+    init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
     config = tf.ConfigProto(allow_soft_placement = True)
 
     with tf.Session(config=config) as sess:

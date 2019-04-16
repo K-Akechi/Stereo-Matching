@@ -58,7 +58,7 @@ def loss_fun(left_image, right_image, disparity_map):
 
 def cost_volume(left_image, right_image):
     cost_volume_list = []
-    constant_disp_shape = right_image.get_shape().as_list()#返回张量的shape
+    constant_disp_shape = right_image.get_shape().as_list()
 
     for disp in range(disparity_range):
         right_moved = image_bias_move_v2(right_image, tf.constant(disp, dtype=tf.float32, shape=constant_disp_shape))

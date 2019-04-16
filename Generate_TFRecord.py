@@ -56,8 +56,8 @@ def rgba_to_rgb(img):
 
 
 cwd = os.getcwd()
-dirs = [cwd + '/' + 'flyingthings3d_frames_cleanpass/',
-        cwd + '/' + 'flyingthings3d__disparity/disparity/']
+dirs = [cwd + '/' + 'dataset' + '/' + 'frames_cleanpass/',
+        cwd + '/' + 'dataset' + '/' + 'frames_disparity/']
 
 writer_tr = tf.python_io.TFRecordWriter("fly_train.tfrecords")
 writer_ts = tf.python_io.TFRecordWriter("fly_test.tfrecords")
@@ -66,10 +66,10 @@ count = 0
 for phase in ['TRAIN', 'TEST']:
     for group in ['A', 'B', 'C']:
         dir_group = dirs[0] + phase + '/' + group
-        dir_group2 = dirs[1] + phase + '/' + group
+        # dir_group2 = dirs[1] + phase + '/' + group
         for img_group in os.listdir(dir_group):
             dir_img_group = dir_group + '/' + img_group
-            dir_dis_group = dir_group2 + '/' + img_group
+            # dir_dis_group = dir_group2 + '/' + img_group
             for img_name in os.listdir(dir_img_group + '/left'):
                 img_path_1 = dir_img_group + '/left/' + img_name
                 img_1 = Image.open(img_path_1)
