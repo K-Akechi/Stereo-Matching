@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
-import train
+import params
+import pdb
 
 
 def get_gaussian_filter(kernel_shape):
@@ -50,9 +51,10 @@ def LocalContrastNorm(image, radius=9):
 
 
 def read_and_decode(filename):
-    width, height = train.original_width, train.original_height
-    batch_size = train.batch_size
-    target_w, target_h = train.target_width, train.target_height
+    p = params.Params()
+    width, height = p.original_w, p.original_h
+    batch_size = p.batch_size
+    target_w, target_h = p.target_w, p.target_h
 
     filename_queue = tf.train.string_input_producer([filename])
 
@@ -74,8 +76,8 @@ def read_and_decode(filename):
     
     image_right = tf.decode_raw(features['img_right'], tf.uint8)
     image_right = tf.reshape(image_right, [height, width, 3])
-    
-    
+
+
     #    disparity = tf.decode_raw(features['disparity'], tf.float32)
     #    disparity = tf.reshape(disparity, [height, width, 1])
 

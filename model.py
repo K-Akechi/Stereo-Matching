@@ -1,11 +1,12 @@
 import tensorflow as tf
 import numpy as np
-import train
+import params
 
-batch_size = train.batch_size
-disparity_range = (train.max_disparity + 1) // pow(2, 3)
-height = train.target_height
-width = train.target_width
+p = params.Params()
+batch_size = p.batch_size
+disparity_range = (p.max_disparity + 1) // pow(2, 3)
+height = p.target_h
+width = p.target_w
 
 
 def residual_block(image, channels, stride, dilated):

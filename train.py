@@ -5,17 +5,18 @@ import argparse
 import model
 import util
 import time
+import params
 #import os
 #os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
+p = params.Params()
+original_height = p.original_h
+original_width = p.original_w
+target_height = p.target_h
+target_width = p.target_w
 
-original_height = 540
-original_width = 960
-target_height = 256
-target_width = 512
-
-max_disparity = 192
-batch_size = 16
+max_disparity = p.max_disparity
+batch_size = p.batch_size
 
 initial_lr = 1e-4
 iterations = 2000
