@@ -55,9 +55,9 @@ def rgba_to_rgb(img):
     return img_temp
 
 
-cwd = os.getcwd()
-dirs = [cwd + '/' + 'dataset' + '/' + 'frames_cleanpass/',
-        cwd + '/' + 'dataset' + '/' + 'frames_disparity/']
+# cwd = os.getcwd()
+dirs = ['/media/new/Seagate Backup Plus Drive/frames_cleanpass/',
+        '/media/new/Seagate Backup Plus Drive/frames_disparity/']
 
 writer_tr = tf.python_io.TFRecordWriter("fly_train.tfrecords")
 writer_ts = tf.python_io.TFRecordWriter("fly_test.tfrecords")

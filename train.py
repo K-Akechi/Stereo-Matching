@@ -2,10 +2,12 @@ import tensorflow as tf
 import numpy as np
 from PIL import Image
 import argparse
+import pdb
 import model
 import util
 import time
 import params
+from bilinear_sampler import *
 #import os
 #os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -18,17 +20,19 @@ target_width = p.target_w
 max_disparity = p.max_disparity
 batch_size = p.batch_size
 
-initial_lr = 1e-4
+initial_lr = 1e-3
 iterations = 2000
 
-data_record = [" fly_train.tfrecords", "fly_test.tfrecords"]
+data_record = ["/home/new/Documents/Stereo-Matching/fly_train.tfrecords", "/home/new/Documents/Stereo-Matching/fly_test.tfrecords"]
 
 train_dir = 'saved_model/'
 
 
-def loss_fun(left_input, right_input, disp_map):
+def loss_func(left_input, right_input, disp_map):
     left_reconstructed = model.image_bias_move_v2(right_input, disp_map)
+    print("reconstruct ok")
     left_wlcn = wlcn(left_input, left_reconstructed)
+    print("wlcn ok")
     guassian_filter = tf.convert_to_tensor(util.get_gaussian_filter((9, 9, left_wlcn.get_shape().as_list()[4], 1)))
     left_wlcn_slices = tf.unstack(left_wlcn, axis=0)
     loss = []
@@ -75,6 +79,20 @@ def wlcn(left, left_rc):
     return tf.stack(loss_s_deviation)
 
 
+def loss_func_v1(left_input, right_input, disp_map):
+    right = bilinear_sampler_1d_h(right_input, disp_map)
+    left = left_input
+
+
+
+    tf.summary.image('right_input', right_input, 1)
+    tf.summary.image('right_moved', right, 1)
+    tf.summary.image('disparity', disp_map, 1)
+    l = tf.abs(right - left)
+
+    return l
+
+
 def main(argv=None):
     tf.logging.set_verbosity(tf.logging.ERROR)
 
@@ -87,10 +105,10 @@ def main(argv=None):
 
     pred_disp = model.stereonet(left_image, right_image)
 
-    loss = tf.reduce_mean(loss_fun(left_image, right_image, pred_disp))
+    loss = tf.reduce_mean(loss_func(left_image, right_image, pred_disp))
     tf.summary.scalar('loss: ', loss)
 
-    global_step = tf.Variable(0, name='globa_step', trainable=False)
+    global_step = tf.Variable(0, name='global_step', trainable=False)
     learning_rate = initial_lr
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
     weights = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='first_part|second_part|third_part')
@@ -101,7 +119,8 @@ def main(argv=None):
     saver = tf.train.Saver()
     summary_op = tf.summary.merge_all()
     init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
-    config = tf.ConfigProto(allow_soft_placement = True)
+    config = tf.ConfigProto(allow_soft_placement=False)
+    config.gpu_options.allow_growth = True
 
     with tf.Session(config=config) as sess:
         restore_dir = tf.train.latest_checkpoint(train_dir)
@@ -110,19 +129,28 @@ def main(argv=None):
             print('restore succeed')
         else:
             sess.run(init)
-        summart_writer = tf.summary.FileWriter(train_dir+'log', sess.graph)
+#        summary_writer = tf.summary.FileWriter(train_dir+'log', sess.graph)
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=sess, coord=coord)
         for step in range(iterations+1):
             start_time = time.time()
+#            pdb.set_trace()
+            sess.graph.finalize()
             batch = sess.run(batch_train)
-            print(batch)
+#            print(batch)
             feed_dict = {left_image: batch[0], right_image: batch[1], phase: True}
-            summary, _, loss_value, glb_step = sess.run([summary_op, train_op, loss, global_step], feed_dict=feed_dict)
+            _, loss_value, glb_step = sess.run([train_op, loss, global_step], feed_dict=feed_dict)
+#            loss_value = sess.run(loss, feed_dict=feed_dict)
+#            print(loss_value)
+#            sess.run(grads, feed_dict=feed_dict)
+#            sess.run(train_op, feed_dict=feed_dict)
+            glb_step = sess.run(global_step, feed_dict=feed_dict)
             duration = time.time() - start_time
-            write_summary = glb_step % 100
+#            write_summary = glb_step % 100
+            """
             if write_summary or step == 0:
-                summart_writer.add_summary(summary)
+                summary_writer.add_summary(summary)
+            """
             if glb_step % 2 == 0 and step > 0:
                 print('Step %d: training loss = %.2f (%.3f sec/batch)' % (glb_step, loss_value, duration))
             if glb_step % 1000 == 0 and step > 0:

@@ -62,16 +62,28 @@ def cost_volume(left_image, right_image):
     constant_disp_shape = right_image.get_shape().as_list()
 
     for disp in range(disparity_range):
+        '''
         right_moved = image_bias_move_v2(right_image, tf.constant(disp, dtype=tf.float32, shape=constant_disp_shape))
         tf.summary.image('right_siamese_moved', right_moved[:, :, :, :3], 2)
         cost_volume_list.append(tf.concat([left_image, right_moved], axis=-1))
-    cost_volume = tf.stack(cost_volume_list, axis=1)
+        '''
+        paddings = [[0, 0], [0, 0], [disp, 0], [0, 0]]
+        for k in range(constant_disp_shape[3]):
+            left_feature = tf.slice(left_image, [0, 0, 0, k], [batch_size, height/8, width/8, 1])
+            right_feature = tf.slice(right_image, [0, 0, 0, k], [batch_size, height/8, width/8, 1])
+            right_feature = tf.slice(right_feature, [0, 0, disp, 0], [batch_size, height/8, width/8 - disp, 1])
+            right_feature = tf.pad(right_feature, paddings, "CONSTANT")
+            cost_volume_list.append(tf.concat([left_feature, right_feature], axis=-1))
+
+    cost_volume = tf.stack(cost_volume_list)
+    cost_volume = tf.reshape(cost_volume, shape=(disparity_range, 2*constant_disp_shape[3], batch_size, height/8, width/8))
+    cost_volume = tf.transpose(cost_volume, [2, 0, 3, 4, 1])
 
     for i in range(4):
         cost_volume = tf.layers.conv3d(cost_volume, filters=32, kernel_size=3, padding='same', strides=1)
         cost_volume = tf.nn.leaky_relu(tf.layers.batch_normalization(cost_volume))
     cost_volume = tf.layers.conv3d(cost_volume, filters=1, kernel_size=3, padding='same', strides=1)
-    cost_volume = tf.nn.dropout(cost_volume, keep_prob=0.9)
+#    cost_volume = tf.nn.dropout(cost_volume, keep_prob=0.9)
 
     disparity_volume = tf.reshape(tf.tile(tf.expand_dims(tf.range(disparity_range), axis=1), [1, constant_disp_shape[1] * constant_disp_shape[2] * cost_volume.get_shape().as_list()[-1]]), [1, -1])
     disparity_volume = tf.reshape(tf.tile(disparity_volume, [batch_size, 1]), [-1] + cost_volume.get_shape().as_list()[1: ])
