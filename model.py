@@ -131,7 +131,7 @@ def stereonet(image_l, image_r):
         new_shape = disp_map.get_shape().as_list()
         new_shape[1] *= 8
         new_shape[2] *= 8
-        disp_map = tf.image.resize_images(disp_map, [new_shape[1], new_shape[2]])
+        disp_map_upsampled = tf.image.resize_images(disp_map, [new_shape[1], new_shape[2]])
 
     with tf.variable_scope('third_part', reuse=tf.AUTO_REUSE):
         input_left = tf.layers.conv2d(image_l, filters=16, kernel_size=3, strides=1, padding='same')
@@ -139,7 +139,7 @@ def stereonet(image_l, image_r):
         input_left = residual_block(input_left, 16, 1, 1)
         input_left = residual_block(input_left, 16, 1, 2)
 
-        disp_map = tf.layers.conv2d(disp_map, filters=16, kernel_size=3, strides=1, padding='same')
+        disp_map = tf.layers.conv2d(disp_map_upsampled, filters=16, kernel_size=3, strides=1, padding='same')
         disp_map = tf.nn.leaky_relu(tf.layers.batch_normalization(disp_map))
         disp_map = residual_block(disp_map, 16, 1, 1)
         disp_map = residual_block(disp_map, 16, 1, 2)
@@ -153,7 +153,7 @@ def stereonet(image_l, image_r):
 
         disp_res = tf.layers.conv2d(layer, filters=1, kernel_size=3, strides=1, padding='same')
 
-    return tf.add(disp_map, disp_res)
+    return tf.add(disp_map_upsampled, disp_res )
 
 
 def invalidation_network(left_siamese, right_siamese, fullres_disp, left_input):

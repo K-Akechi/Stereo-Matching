@@ -115,6 +115,7 @@ def main(argv=None):
         for step in range(iterations+1):
             start_time = time.time()
             batch = sess.run(batch_train)
+            print(batch)
             feed_dict = {left_image: batch[0], right_image: batch[1], phase: True}
             summary, _, loss_value, glb_step = sess.run([summary_op, train_op, loss, global_step], feed_dict=feed_dict)
             duration = time.time() - start_time
