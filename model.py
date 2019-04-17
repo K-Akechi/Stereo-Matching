@@ -1,8 +1,10 @@
 import tensorflow as tf
 import numpy as np
 import params
+import bilinear_sampler
 
 p = params.Params()
+
 batch_size = p.batch_size
 disparity_range = (p.max_disparity + 1) // pow(2, 3)
 height = p.target_h
@@ -24,37 +26,8 @@ def siamese_network(image):
     for i in range(3):
         layer = tf.layers.conv2d(layer, filters=32, kernel_size=3, padding='same', strides=2)
         layer = tf.nn.leaky_relu(tf.layers.batch_normalization(layer))
-    layer = tf.layers.conv2d(layer, filters=32, kernel_size=3, padding='same', strides=1)
+        layer = tf.layers.conv2d(layer, filters=32, kernel_size=3, padding='same', strides=1)
     return layer
-
-
-'''
-def cost_volumn(left_features, right_features, method="subtract"):
-    cost_volumn_list = []
-    for disp in range((disparity_range + 1) // 8):
-        paddings = [[0, 0], [0, 0], [disp, 0], [0, 0]]
-        for k in range(32):
-            left_feature = tf.slice(left_features,  [0, 0, 0, k], [height//8, width//8, 1])
-            right_feature = tf.slice(right_features, [0, 0, 0, k], [height//8, width//8, 1])
-            right_feature = tf.slice(right_feature, [0, 0, disp, 0], [height//8, width//8 - disp, 1])
-            right_feature = tf.pad(right_feature, paddings, "CONSTANT")
-#            cost_volumn_list.append(left_feature)
-            if method == "subtract":
-                cost_volumn_list.append(left_feature - right_feature)
-            else:
-                cost_volumn_list.append(left_feature)
-                cost_volumn_list.append(right_feature)
-    cost_volumn_list = tf.stack(cost_volumn_list)
-    cost_volumn_list = tf.reshape(cost_volumn_list, shape=(batch_size, (disparity_range+1)//8, 32, height//8, width//8))
-    cost_volumn_list = tf.transpose(cost_volumn_list, [0, 1, 3, 4, 2])
-
-    return cost_volumn_list
-
-def loss_fun(left_image, right_image, disparity_map):
-    reconstruction_left = np.zeros(batch_size, height, width, 3)
-
-    return
-'''
 
 
 def cost_volume(left_image, right_image):
@@ -62,7 +35,7 @@ def cost_volume(left_image, right_image):
     constant_disp_shape = right_image.get_shape().as_list()
 
     for disp in range(disparity_range):
-        '''
+
         right_moved = image_bias_move_v2(right_image, tf.constant(disp, dtype=tf.float32, shape=constant_disp_shape))
         tf.summary.image('right_siamese_moved', right_moved[:, :, :, :3], 2)
         cost_volume_list.append(tf.concat([left_image, right_moved], axis=-1))
@@ -74,16 +47,16 @@ def cost_volume(left_image, right_image):
             right_feature = tf.slice(right_feature, [0, 0, disp, 0], [batch_size, height/8, width/8 - disp, 1])
             right_feature = tf.pad(right_feature, paddings, "CONSTANT")
             cost_volume_list.append(tf.concat([left_feature, right_feature], axis=-1))
-
+        '''
     cost_volume = tf.stack(cost_volume_list)
-    cost_volume = tf.reshape(cost_volume, shape=(disparity_range, 2*constant_disp_shape[3], batch_size, height/8, width/8))
-    cost_volume = tf.transpose(cost_volume, [2, 0, 3, 4, 1])
+#    cost_volume = tf.reshape(cost_volume, shape=(disparity_range, 2*constant_disp_shape[3], batch_size, height/8, width/8))
+#    cost_volume = tf.transpose(cost_volume, [2, 0, 3, 4, 1])
 
     for i in range(4):
         cost_volume = tf.layers.conv3d(cost_volume, filters=32, kernel_size=3, padding='same', strides=1)
         cost_volume = tf.nn.leaky_relu(tf.layers.batch_normalization(cost_volume))
     cost_volume = tf.layers.conv3d(cost_volume, filters=1, kernel_size=3, padding='same', strides=1)
-#    cost_volume = tf.nn.dropout(cost_volume, keep_prob=0.9)
+    cost_volume = tf.nn.dropout(cost_volume, keep_prob=0.9)
 
     disparity_volume = tf.reshape(tf.tile(tf.expand_dims(tf.range(disparity_range), axis=1), [1, constant_disp_shape[1] * constant_disp_shape[2] * cost_volume.get_shape().as_list()[-1]]), [1, -1])
     disparity_volume = tf.reshape(tf.tile(disparity_volume, [batch_size, 1]), [-1] + cost_volume.get_shape().as_list()[1: ])
@@ -97,41 +70,41 @@ def cost_volume(left_image, right_image):
 
 
 def image_bias_move_v2(image, disparity_map):
-    image = tf.pad(image, paddings=[[0, 0], [0, 0], [1, 1], [0, 0]])
-    disparity_map = tf.pad(disparity_map, paddings=[[0, 0], [0, 0], [1, 1], [0, 0]])
+        image = tf.pad(image, paddings=[[0, 0], [0, 0], [1, 1], [0, 0]])
+        disparity_map = tf.pad(disparity_map, paddings=[[0, 0], [0, 0], [1, 1], [0, 0]])
 
-    # create fundamental matrix
-    each_1d_arr = tf.range(image.get_shape()[2])
-    each_2d_arr = tf.tile(tf.expand_dims(each_1d_arr, axis=0), [image.get_shape()[1], 1])
-    each_batch_2d_arr = tf.tile(tf.expand_dims(each_2d_arr, axis=0), [batch_size, 1, 1])
-    each_batch_2d_arr = tf.to_float(each_batch_2d_arr)
+        # create fundamental matrix
+        each_1d_arr = tf.range(image.get_shape()[2])
+        each_2d_arr = tf.tile(tf.expand_dims(each_1d_arr, axis=0), [image.get_shape()[1], 1])
+        each_batch_2d_arr = tf.tile(tf.expand_dims(each_2d_arr, axis=0), [batch_size, 1, 1])
+        each_batch_2d_arr = tf.to_float(each_batch_2d_arr)
 
-    # sub/add bias value
-    if len(disparity_map.get_shape().as_list()) == 3:
-        tf.expand_dims(disparity_map, axis=-1)
-    biased_batch_2d_arr = tf.clip_by_value(tf.to_float(each_batch_2d_arr - disparity_map[:, :, :, 0]), 0., tf.to_float(image.get_shape()[2] - 1))
+        # sub/add bias value
+        if len(disparity_map.get_shape().as_list()) == 3:
+            tf.expand_dims(disparity_map, axis=-1)
+        biased_batch_2d_arr = tf.clip_by_value(tf.to_float(each_batch_2d_arr - disparity_map[:, :, :, 0]), 0., tf.to_float(image.get_shape()[2] - 1))
 
-    # set start index for each batch and row
-    initial_arr = tf.tile(tf.expand_dims(tf.range(image.get_shape()[1] * batch_size) * image.get_shape()[2], axis=-1), [1, image.get_shape()[2]])
+        # set start index for each batch and row
+        initial_arr = tf.tile(tf.expand_dims(tf.range(image.get_shape()[1] * batch_size) * image.get_shape()[2], axis=-1), [1, image.get_shape()[2]])
 
-    # finally add together without channels dim
-    biased_batch_2d_arr_high = tf.clip_by_value(tf.to_int32(tf.floor(biased_batch_2d_arr + 1)), 0, image.get_shape()[2] - 1)
-    biased_batch_2d_arr_low = tf.clip_by_value(tf.to_int32(tf.floor(biased_batch_2d_arr)), 0, image.get_shape()[2] - 1)
+        # finally add together without channels dim
+        biased_batch_2d_arr_high = tf.clip_by_value(tf.to_int32(tf.floor(biased_batch_2d_arr + 1)), 0, image.get_shape()[2] - 1)
+        biased_batch_2d_arr_low = tf.clip_by_value(tf.to_int32(tf.floor(biased_batch_2d_arr)), 0, image.get_shape()[2] - 1)
 
-    index_arr_high = tf.to_int32(tf.reshape(initial_arr, [-1])) + tf.reshape(biased_batch_2d_arr_high, [-1])
-    index_arr_low = tf.to_int32(tf.reshape(initial_arr, [-1])) + tf.reshape(biased_batch_2d_arr_low, [-1])
-    index_arr = tf.to_float(tf.reshape(initial_arr, [-1])) + tf.reshape(biased_batch_2d_arr, [-1])
+        index_arr_high = tf.to_int32(tf.reshape(initial_arr, [-1])) + tf.reshape(biased_batch_2d_arr_high, [-1])
+        index_arr_low = tf.to_int32(tf.reshape(initial_arr, [-1])) + tf.reshape(biased_batch_2d_arr_low, [-1])
+        index_arr = tf.to_float(tf.reshape(initial_arr, [-1])) + tf.reshape(biased_batch_2d_arr, [-1])
 
-    weight_low = tf.to_float(index_arr_high) - tf.to_float(index_arr)
-    weight_high = tf.to_float(index_arr) - tf.to_float(index_arr_low)
+        weight_low = tf.to_float(index_arr_high) - tf.to_float(index_arr)
+        weight_high = tf.to_float(index_arr) - tf.to_float(index_arr_low)
 
-    # consider channel
-    weight_low = tf.expand_dims(weight_low, axis=-1)
-    weight_high = tf.expand_dims(weight_high, axis=-1)
-    n_image = tf.reshape(image, [-1, image.get_shape()[-1]])
-    new_image = weight_low * tf.gather(n_image, index_arr_low) + weight_high * tf.gather(n_image, index_arr_high)
+        # consider channel
+        weight_low = tf.expand_dims(weight_low, axis=-1)
+        weight_high = tf.expand_dims(weight_high, axis=-1)
+        n_image = tf.reshape(image, [-1, image.get_shape()[-1]])
+        new_image = weight_low * tf.gather(n_image, index_arr_low) + weight_high * tf.gather(n_image, index_arr_high)
 
-    return tf.reshape(new_image, image.get_shape())[:, :, 1: -1, :]
+        return tf.reshape(new_image, image.get_shape())[:, :, 1: -1, :]
 
 
 def stereonet(image_l, image_r):
@@ -166,24 +139,6 @@ def stereonet(image_l, image_r):
 
         disp_res = tf.layers.conv2d(layer, filters=1, kernel_size=3, strides=1, padding='same')
 
-    return tf.add(disp_map_upsampled, disp_res )
+    return tf.add(disp_map_upsampled, disp_res)
 
 
-def invalidation_network(left_siamese, right_siamese, fullres_disp, left_input):
-    layer = tf.concat([left_siamese, right_siamese], axis=-1)
-    for i in range(5):
-        layer = residual_block(layer, 64, 1, 1)
-    layer = tf.layers.conv2d(layer, filters=1, kernel_size=3, strides=1, padding='same')
-    new_shape = layer.get_shape().as_list()
-    new_shape[1] *= 8
-    new_shape[2] *= 8
-    upsampled_invalid = tf.image.resize_images(layer, [new_shape[1], new_shape[2]])
-
-    layer2 = tf.concat([upsampled_invalid, fullres_disp, left_input], axis=-1)
-    layer2 = tf.layers.conv2d(layer2, filters=32, kernel_size=3, strides=1, padding='same')
-    layer2 = tf.nn.leaky_relu(tf.layers.batch_normalization(layer2))
-    for i in range(4):
-        layer2 = residual_block(layer2, 32, 1, 1)
-    invalid_res = tf.layers.conv2d(layer2, filters=1, kernel_size=3, strides=1, padding='same')
-
-    return tf.add(upsampled_invalid, invalid_res)
