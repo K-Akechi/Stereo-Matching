@@ -15,7 +15,8 @@ def residual_block(image, channels, stride, dilated):
     layer1 = tf.layers.conv2d(image, filters=channels, kernel_size=3, padding='same', strides=stride, dilation_rate=dilated)
     layer1 = tf.nn.leaky_relu(tf.layers.batch_normalization(layer1))
     layer2 = tf.layers.conv2d(layer1, filters=channels, kernel_size=3, padding='same', strides=stride, dilation_rate=dilated)
-    return tf.nn.leaky_relu(tf.layers.batch_normalization(image + layer2))
+    layer2 = tf.layers.batch_normalization(layer2)
+    return tf.nn.leaky_relu(image + layer2)
 
 
 def siamese_network(image):
@@ -48,7 +49,7 @@ def cost_volume(left_image, right_image):
             right_feature = tf.pad(right_feature, paddings, "CONSTANT")
             cost_volume_list.append(tf.concat([left_feature, right_feature], axis=-1))
         '''
-    cost_volume = tf.stack(cost_volume_list)
+    cost_volume = tf.stack(cost_volume_list, axis=1)
 #    cost_volume = tf.reshape(cost_volume, shape=(disparity_range, 2*constant_disp_shape[3], batch_size, height/8, width/8))
 #    cost_volume = tf.transpose(cost_volume, [2, 0, 3, 4, 1])
 
@@ -56,7 +57,7 @@ def cost_volume(left_image, right_image):
         cost_volume = tf.layers.conv3d(cost_volume, filters=32, kernel_size=3, padding='same', strides=1)
         cost_volume = tf.nn.leaky_relu(tf.layers.batch_normalization(cost_volume))
     cost_volume = tf.layers.conv3d(cost_volume, filters=1, kernel_size=3, padding='same', strides=1)
-    cost_volume = tf.nn.dropout(cost_volume, keep_prob=0.9)
+#    cost_volume = tf.nn.dropout(cost_volume, keep_prob=0.9)
 
     disparity_volume = tf.reshape(tf.tile(tf.expand_dims(tf.range(disparity_range), axis=1), [1, constant_disp_shape[1] * constant_disp_shape[2] * cost_volume.get_shape().as_list()[-1]]), [1, -1])
     disparity_volume = tf.reshape(tf.tile(disparity_volume, [batch_size, 1]), [-1] + cost_volume.get_shape().as_list()[1: ])
@@ -115,6 +116,7 @@ def stereonet(image_l, image_r):
     with tf.variable_scope('second_part', reuse=tf.AUTO_REUSE):
         disp_map = cost_volume(left_siamese, right_siamese)
         new_shape = disp_map.get_shape().as_list()
+        print(new_shape)
         new_shape[1] *= 8
         new_shape[2] *= 8
         disp_map_upsampled = tf.image.resize_images(disp_map, [new_shape[1], new_shape[2]])

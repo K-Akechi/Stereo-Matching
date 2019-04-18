@@ -1,4 +1,5 @@
 import tensorflow as tf
+import tensorflow.contrib.slim as slim
 import numpy as np
 import params
 import pdb
@@ -6,18 +7,22 @@ import pdb
 
 def get_gaussian_filter(kernel_shape):
     x = np.zeros(kernel_shape, dtype='float32')
+    sum = 1
 
     def gauss(x, y, sigma=2.0):
         Z = 2 * np.pi * sigma ** 2
         return 1. / Z * np.exp(-(x ** 2 + y ** 2) / (2. * sigma ** 2))
 
     mid = np.floor(kernel_shape[1] / 2.)
-    for kernel_idx in range(0, kernel_shape[2]):
-        for i in range(0, kernel_shape[0]):
-            for j in range(0, kernel_shape[1]):
-                x[i, j, kernel_idx, 0] = gauss(i - mid, j - mid)
+    for out_idx in range(0, kernel_shape[3]):
+        for kernel_idx in range(0, kernel_shape[2]):
+            for i in range(0, kernel_shape[0]):
+                for j in range(0, kernel_shape[1]):
+                    x[i, j, kernel_idx, out_idx] = gauss(i - mid, j - mid)
+                    if out_idx == 0:
+                        sum = np.sum(x)
 
-    return x / np.sum(x)
+    return x / sum
 
 
 def LocalContrastNorm(image, radius=9):
@@ -94,3 +99,39 @@ def read_and_decode(filename):
         min_after_dequeue=10, num_threads=2)
 
     return [image_left_batch, image_right_batch]
+
+
+def gradient_x(img):
+    gx = img[:,:,:-1,:] - img[:,:,1:,:]
+    return gx
+
+
+def gradient_y(img):
+    gy = img[:,:-1,:,:] - img[:,1:,:,:]
+    return gy
+
+
+def gradient_total(img):
+    img_gradient_x = gradient_x(img)
+    img_gradient_y = gradient_y(img)
+    gradient = tf.reduce_mean(tf.abs(img_gradient_x), axis=3, keep_dims=True) + tf.reduce_mean(tf.abs(img_gradient_y), axis=3, keep_dims=True)
+    return gradient
+
+def SSIM(x, y):
+    C1 = 0.01 ** 2
+    C2 = 0.03 ** 2
+
+    mu_x = slim.avg_pool2d(x, 3, 1, 'VALID')
+    mu_y = slim.avg_pool2d(y, 3, 1, 'VALID')
+
+    sigma_x  = slim.avg_pool2d(x ** 2, 3, 1, 'VALID') - mu_x ** 2
+    sigma_y  = slim.avg_pool2d(y ** 2, 3, 1, 'VALID') - mu_y ** 2
+    sigma_xy = slim.avg_pool2d(x * y , 3, 1, 'VALID') - mu_x * mu_y
+
+    SSIM_n = (2 * mu_x * mu_y + C1) * (2 * sigma_xy + C2)
+    SSIM_d = (mu_x ** 2 + mu_y ** 2 + C1) * (sigma_x + sigma_y + C2)
+
+    SSIM = SSIM_n / SSIM_d
+
+    return tf.clip_by_value((1 - SSIM) / 2, 0, 1)
+

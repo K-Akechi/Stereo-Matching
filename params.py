@@ -1,6 +1,6 @@
 class Params():
     def __init__(self):
-        self.batch_size = 6
+        self.batch_size = 4
         self.target_h = 256
         self.target_w = 512
 
