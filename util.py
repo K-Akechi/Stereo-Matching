@@ -36,7 +36,7 @@ def LocalContrastNorm(image, radius=9):
 
     n, h, w, c = image.shape[0], image.shape[1], image.shape[2], image.shape[3]
     image = tf.pad(image, [[0, 0], [radius // 2, radius // 2], [radius // 2, radius // 2], [0, 0]])
-    gaussian_filter = tf.convert_to_tensor(get_gaussian_filter((radius, radius, c, 1)))
+    gaussian_filter = tf.convert_to_tensor(get_gaussian_filter((radius, radius, c, 3)))
     filtered_out = tf.nn.conv2d(image, gaussian_filter, [1, 1, 1, 1], padding='SAME')
     mid = int(np.floor(gaussian_filter.get_shape().as_list()[0] / 2.))
 
@@ -45,7 +45,7 @@ def LocalContrastNorm(image, radius=9):
     centered_image_origin_size = centered_image[:, mid:-mid, mid:-mid, :]
     ## Variance Calc
     sum_sqr_image = tf.nn.conv2d(tf.square(centered_image), gaussian_filter, [1, 1, 1, 1], padding='SAME')
-    s_deviation = tf.sqrt(sum_sqr_image[:, mid:-mid, mid:-mid, :])
+    s_deviation = tf.pow(sum_sqr_image[:, mid:-mid, mid:-mid, :] + 1e-8, 0.5)
     # per_img_mean = tf.reduce_mean(s_deviation)
 
     ## Divisive Normalization
@@ -86,9 +86,9 @@ def read_and_decode(filename):
     #    disparity = tf.decode_raw(features['disparity'], tf.float32)
     #    disparity = tf.reshape(disparity, [height, width, 1])
 
-    # Convert from [0, 255] -> [-0.5, 0.5] floats.
-    image_left = tf.cast(image_left, tf.float32) * (1. / 255)
-    image_right = tf.cast(image_right, tf.float32) * (1. / 255)
+    # Convert from [0, 255] -> [-1, 1] floats.
+    image_left = tf.cast(image_left, tf.float32) * (1. / 255) * 2. - 1.
+    image_right = tf.cast(image_right, tf.float32) * (1. / 255) * 2. - 1.
 #    print(image_left)
     concat = tf.concat([image_left, image_right], 2)
     img_crop = tf.random_crop(concat, [target_h, target_w, 6])
@@ -102,11 +102,25 @@ def read_and_decode(filename):
 
 
 def gradient_x(img):
+    img = tf.pad(img, [[0, 0], [0, 0], [1, 0], [0, 0]])
+    gx = img[:,:,1:,:] - img[:,:,:-1,:]
+    return gx
+
+
+def gradient_x_v2(img):
+    img = tf.pad(img, [[0, 0], [0, 0], [0, 1], [0, 0]])
     gx = img[:,:,:-1,:] - img[:,:,1:,:]
     return gx
 
 
 def gradient_y(img):
+    img = tf.pad(img, [[0, 0], [1, 0], [0, 0], [0, 0]])
+    gy = img[:,1:,:,:] - img[:,:-1,:,:]
+    return gy
+
+
+def gradient_y_v2(img):
+    img = tf.pad(img, [[0, 0], [0, 1], [0, 0], [0, 0]])
     gy = img[:,:-1,:,:] - img[:,1:,:,:]
     return gy
 
@@ -116,6 +130,17 @@ def gradient_total(img):
     img_gradient_y = gradient_y(img)
     gradient = tf.reduce_mean(tf.abs(img_gradient_x), axis=3, keep_dims=True) + tf.reduce_mean(tf.abs(img_gradient_y), axis=3, keep_dims=True)
     return gradient
+
+
+def second_gradient(img):
+    img_gradient_x = gradient_x(img)
+    img_gradient_y = gradient_y(img)
+    second_gradient_x = gradient_x_v2(img_gradient_x)
+    second_gradient_y = gradient_y_v2(img_gradient_y)
+
+    return second_gradient_x, second_gradient_y
+
+
 
 def SSIM(x, y):
     C1 = 0.01 ** 2

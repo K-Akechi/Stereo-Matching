@@ -34,12 +34,52 @@ def siamese_network(image):
 def cost_volume(left_image, right_image):
     cost_volume_list = []
     constant_disp_shape = right_image.get_shape().as_list()
-
-    for disp in range(disparity_range):
+#    print constant_disp_shape
+    for disp in range(1, disparity_range+1):
 
         right_moved = image_bias_move_v2(right_image, tf.constant(disp, dtype=tf.float32, shape=constant_disp_shape))
         tf.summary.image('right_siamese_moved', right_moved[:, :, :, :3], 2)
-        cost_volume_list.append(tf.concat([left_image, right_moved], axis=-1))
+        # cost_volume_list.append(tf.concat([left_image, right_moved], axis=-1))
+        cost_volume_list.append(left_image - right_moved)
+        '''
+        paddings = [[0, 0], [0, 0], [disp, 0], [0, 0]]
+        for k in range(constant_disp_shape[3]):
+            left_feature = tf.slice(left_image, [0, 0, 0, k], [batch_size, height/8, width/8, 1])
+            right_feature = tf.slice(right_image, [0, 0, 0, k], [batch_size, height/8, width/8, 1])
+            right_feature = tf.slice(right_feature, [0, 0, disp, 0], [batch_size, height/8, width/8 - disp, 1])
+            right_feature = tf.pad(right_feature, paddings, "CONSTANT")
+            cost_volume_list.append(tf.concat([left_feature, right_feature], axis=-1))
+        '''
+    cost_volume = tf.stack(cost_volume_list, axis=0)
+    # cost_volume = tf.reshape(cost_volume, shape=(disparity_range, 2*constant_disp_shape[3], batch_size, height/8, width/8))
+    cost_volume = tf.transpose(cost_volume, [1, 0, 2, 3, 4])
+
+    for i in range(4):
+        cost_volume = tf.layers.conv3d(cost_volume, filters=32, kernel_size=3, padding='same', strides=1)
+        cost_volume = tf.nn.leaky_relu(tf.layers.batch_normalization(cost_volume))
+    cost_volume = tf.layers.conv3d(cost_volume, filters=1, kernel_size=3, padding='same', strides=1)
+#    cost_volume = tf.nn.dropout(cost_volume, keep_prob=0.9)
+
+    disparity_volume = tf.reshape(tf.tile(tf.expand_dims(tf.range(1, disparity_range+1), axis=1), [1, constant_disp_shape[1] * constant_disp_shape[2] * cost_volume.get_shape().as_list()[-1]]), [1, -1])
+    disparity_volume = tf.reshape(tf.tile(disparity_volume, [batch_size, 1]), cost_volume.get_shape().as_list())
+
+    new_batch_slice = []
+    batch_slice = tf.unstack(cost_volume, axis=0)
+    for item in batch_slice:
+        new_batch_slice.append(tf.nn.softmax(-item, axis=0))
+
+    return tf.reduce_sum(tf.to_float(disparity_volume) * tf.stack(new_batch_slice, axis=0), axis=1)
+
+
+def cost_volume_v2(left_image, right_image):
+    cost_volume_list = []
+    constant_disp_shape = left_image.get_shape().as_list()
+#    print constant_disp_shape
+    for disp in range(disparity_range):
+
+        left_moved = image_bias_move_v2(left_image, tf.constant(-disp, dtype=tf.float32, shape=constant_disp_shape))
+        tf.summary.image('left_siamese_moved', left_moved[:, :, :, :3], 2)
+        cost_volume_list.append(tf.concat([right_image, left_moved], axis=-1))
         '''
         paddings = [[0, 0], [0, 0], [disp, 0], [0, 0]]
         for k in range(constant_disp_shape[3]):
@@ -112,14 +152,21 @@ def stereonet(image_l, image_r):
     with tf.variable_scope('first_part', reuse=tf.AUTO_REUSE):
         left_siamese = siamese_network(image_l)
         right_siamese = siamese_network(image_r)
+        print left_siamese
 
     with tf.variable_scope('second_part', reuse=tf.AUTO_REUSE):
-        disp_map = cost_volume(left_siamese, right_siamese)
-        new_shape = disp_map.get_shape().as_list()
-        print(new_shape)
+        disp_map_l = cost_volume(left_siamese, right_siamese)
+        # disp_map_r = cost_volume_v2(left_siamese, right_siamese)
+        new_shape = disp_map_l.get_shape().as_list()
+#        print(new_shape)
         new_shape[1] *= 8
         new_shape[2] *= 8
-        disp_map_upsampled = tf.image.resize_images(disp_map, [new_shape[1], new_shape[2]])
+        disp_map_l_upsampled = tf.image.resize_images(disp_map_l, [new_shape[1], new_shape[2]])
+        # disp_map_r_upsampled = tf.image.resize_images(disp_map_r, [new_shape[1], new_shape[2]])
+        # disp_map_l_upsampled = (disp_map_l_upsampled - tf.reduce_min(disp_map_l_upsampled)) / (
+        #             tf.reduce_max(disp_map_l_upsampled) - tf.reduce_min(disp_map_l_upsampled))
+        # disp_map_r_upsampled = (disp_map_r_upsampled - tf.reduce_min(disp_map_r_upsampled)) / (
+        #         tf.reduce_max(disp_map_r_upsampled) - tf.reduce_min(disp_map_r_upsampled))
 
     with tf.variable_scope('third_part', reuse=tf.AUTO_REUSE):
         input_left = tf.layers.conv2d(image_l, filters=16, kernel_size=3, strides=1, padding='same')
@@ -127,20 +174,21 @@ def stereonet(image_l, image_r):
         input_left = residual_block(input_left, 16, 1, 1)
         input_left = residual_block(input_left, 16, 1, 2)
 
-        disp_map = tf.layers.conv2d(disp_map_upsampled, filters=16, kernel_size=3, strides=1, padding='same')
-        disp_map = tf.nn.leaky_relu(tf.layers.batch_normalization(disp_map))
-        disp_map = residual_block(disp_map, 16, 1, 1)
-        disp_map = residual_block(disp_map, 16, 1, 2)
+        left_disp = tf.layers.conv2d(disp_map_l_upsampled, filters=16, kernel_size=3, strides=1, padding='same')
+        left_disp = tf.nn.leaky_relu(tf.layers.batch_normalization(left_disp))
+        left_disp = residual_block(left_disp, 16, 1, 1)
+        left_disp = residual_block(left_disp, 16, 1, 2)
 
-        layer = tf.concat([input_left, disp_map], axis=-1)
+        layer = tf.concat([input_left, left_disp], axis=-1)
         layer = residual_block(layer, 32, 1, 4)
         layer = residual_block(layer, 32, 1, 8)
 
         for i in range(2):
             layer = residual_block(layer, 32, 1, 1)
 
-        disp_res = tf.layers.conv2d(layer, filters=1, kernel_size=3, strides=1, padding='same')
+        left_res = tf.layers.conv2d(layer, filters=1, kernel_size=3, strides=1, padding='same')
+        # left_res = (left_res - tf.reduce_min(left_res)) / (tf.reduce_max(left_res) - tf.reduce_min(left_res))
 
-    return tf.add(disp_map_upsampled, disp_res)
+    return tf.add(disp_map_l_upsampled, left_res)
 
 
