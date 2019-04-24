@@ -8,13 +8,13 @@ import time
 from bilinear_sampler import *
 height = 512
 width = 960
-train_dir = 'saved_model/'
+train_dir = 'lr_consistency/'
 
 
 left_image = tf.placeholder(tf.float32, [1, height, width, 3])
 right_image = tf.placeholder(tf.float32, [1, height, width, 3])
 
-pred_disp_l = model.stereonet(left_image, right_image)
+pred_disp_l, pred_disp_r = model.stereonet(left_image, right_image)
 
 scaled_disp_l = pred_disp_l / width
 left_warp = bilinear_sampler_1d_h(right_image, -scaled_disp_l)
@@ -30,14 +30,24 @@ imgL = np.expand_dims(imgL, axis=0)
 
 
 imgR = np.array(Image.open('/home/new/Documents/Stereo-Matching/0006_r.png'))
-imgR = imgR.astype(np.float32) * (1. / 255)
+imgR = imgR.astype(np.float32) * (1. / 255.)
 imgR = imgR[:height, :width]
 imgR = np.expand_dims(imgR, axis=0)
-pred_disp_l = pred_disp_l / 192
+pred_disp_l = pred_disp_l / 192. * 255.
+pred_disp_r = pred_disp_r / 192. * 255.
 start_time = time.time()
-output = sess.run(pred_disp_l, feed_dict={left_image: imgL, right_image: imgR})
+output1, output2 = sess.run([pred_disp_l, pred_disp_r], feed_dict={left_image: imgL, right_image: imgR})
 duration = time.time() - start_time
 print(sess.run([tf.reduce_min(pred_disp_l), tf.reduce_max(pred_disp_l)], feed_dict={left_image: imgL, right_image: imgR}))
-output = tf.squeeze(output)
-plt.imshow(output.eval(session=sess), cmap='jet')
+output1 = tf.squeeze(output1)
+output2 = tf.squeeze(output2)
+output1 = tf.cast(output1, tf.uint8)
+output2 = tf.cast(output2, tf.uint8)
+output1 = output1.eval(session=sess)
+output2 = output2.eval(session=sess)
+plt.imshow(output1, cmap='jet')
 plt.show()
+output1 = Image.fromarray(output1)
+output2 = Image.fromarray(output2)
+output1.save('left_disp.png')
+output2.save('right_disp.png')

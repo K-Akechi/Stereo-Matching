@@ -20,19 +20,26 @@ target_width = p.target_w
 max_disparity = p.max_disparity
 batch_size = p.batch_size
 
-initial_lr = 1e-4 / 2.
-iterations = 20000
+initial_lr = 1e-4
+iterations = 60000
 
 data_record = ["/home/new/Documents/Stereo-Matching/fly_train.tfrecords", "/home/new/Documents/Stereo-Matching/fly_test.tfrecords"]
 
-train_dir = 'saved_model/'
+train_dir = 'lr_consistency/'
 
 
-def loss_func(left_input, right_input, disp_map):
-    disp_map = disp_map / target_width
-    left_reconstructed = bilinear_sampler_1d_h(right_input, -disp_map)
+def loss_func(left_input, right_input, disp_map_l, disp_map_r):
+    disp_map_l = disp_map_l / target_width
+    disp_map_r = disp_map_r / target_width
+    left_reconstructed = bilinear_sampler_1d_h(right_input, -disp_map_l)
+    right_reconstructed = bilinear_sampler_1d_h(left_input, disp_map_r)
+    # right_to_left_disp = bilinear_sampler_1d_h(disp_map_r, -disp_map_l)
+    # left_to_right_disp = bilinear_sampler_1d_h(disp_map_l, disp_map_r)
 #    print("reconstruct ok")
     left_wlcn = tf.abs(wlcn(left_input, left_reconstructed))
+    right_wlcn = tf.abs(wlcn(right_input, right_reconstructed))
+    # left_second_wlcn = tf.abs(wlcn(left_input, left_second_warp))
+    # right_second_wlcn = tf.abs(wlcn(right_input, right_second_warp))
     # count = 0
     # left_input = tf.pad(left_input, [[0, 0], [16, 16], [16, 16], [0, 0]])
     # left_wlcn = tf.pad(left_wlcn, [[0, 0], [16, 16], [16, 16], [0, 0]])
@@ -65,18 +72,35 @@ def loss_func(left_input, right_input, disp_map):
    # print (left_wlcn)
    # print("wlcn ok")
     guassian_filter = tf.convert_to_tensor(util.get_gaussian_filter((33, 33, p.channels, 3)))
+   #  left_wlcn_loss = tf.nn.conv2d(left_wlcn, guassian_filter, [1, 1, 1, 1], padding='SAME')
+   #  right_wlcn_loss = tf.nn.conv2d(right_wlcn, guassian_filter, [1, 1, 1, 1], padding='SAME')
+   #  left_second_wlcn_loss = tf.nn.conv2d(left_second_wlcn, guassian_filter, [1, 1, 1, 1], padding='SAME')
+   #  right_second_wlcn_loss = tf.nn.conv2d(right_second_wlcn, guassian_filter, [1, 1, 1, 1], padding='SAME')
     left_wlcn_slices = tf.unstack(left_wlcn, axis=0)
-    loss = []
+    left_loss = []
     shape = left_wlcn_slices[0].get_shape().as_list()
     for item in left_wlcn_slices:
         item = tf.reshape(item, [1, shape[0], shape[1], shape[2]])
         left_wlcn_slice = tf.nn.conv2d(item, guassian_filter, [1, 1, 1, 1], padding='SAME')
         left_wlcn_slice = tf.squeeze(left_wlcn_slice, axis=0)
         # left_wlcn_slice = (left_wlcn_slice - tf.reduce_min(left_wlcn_slice)) / (tf.reduce_max(left_wlcn_slice) - tf.reduce_min(left_wlcn_slice))
-        loss.append(left_wlcn_slice)
-    loss = tf.stack(loss)
+        left_loss.append(left_wlcn_slice)
+    left_loss = tf.stack(left_loss)
+
+    right_wlcn_slices = tf.unstack(right_wlcn, axis=0)
+    right_loss = []
+    shape = right_wlcn_slices[0].get_shape().as_list()
+    for item in right_wlcn_slices:
+        item = tf.reshape(item, [1, shape[0], shape[1], shape[2]])
+        right_wlcn_slice = tf.nn.conv2d(item, guassian_filter, [1, 1, 1, 1], padding='SAME')
+        right_wlcn_slice = tf.squeeze(right_wlcn_slice, axis=0)
+        # left_wlcn_slice = (left_wlcn_slice - tf.reduce_min(left_wlcn_slice)) / (tf.reduce_max(left_wlcn_slice) - tf.reduce_min(left_wlcn_slice))
+        right_loss.append(right_wlcn_slice)
+    right_loss = tf.stack(right_loss)
 #    print(loss)
-    return tf.abs(loss)
+#     lr_left_loss = tf.reduce_mean(tf.abs(right_to_left_disp - disp_map_l))
+#     lr_right_loss = tf.reduce_mean(tf.abs(left_to_right_disp - disp_map_r))
+    return tf.reduce_mean(left_loss) + tf.reduce_mean(right_loss)
 
 
 # Weighted Local Contrast Normalization
@@ -235,7 +259,7 @@ def loss_func_v1(left_input, right_input, pred_disp):
 
 def main(argv=None):
 #    tf.logging.set_verbosity(tf.logging.ERROR)
-
+#     tf.reset_default_graph()
     batch_train = util.read_and_decode(data_record[0])
     batch_test = util.read_and_decode(data_record[1])
 
@@ -243,24 +267,37 @@ def main(argv=None):
     right_image = tf.placeholder(tf.float32, [batch_size, target_height, target_width, 3])
     phase = tf.placeholder(tf.bool)
 
-    pred_disp_l = model.stereonet(left_image, right_image)
+    pred_disp_l, pred_disp_r = model.stereonet(left_image, right_image)
 
 #    pred_disp_r = pred_disp_r / target_width
 #    loss_graph = loss_func(left_image, right_image, scaled_disp)
 #    loss = unary_loss(left_image, right_image, pred_disp_l, pred_disp_r) + consistency_loss(left_image, right_image, pred_disp_l, pred_disp_r) + 1e-3 * regularization_loss(left_image, right_image, pred_disp_l, pred_disp_r) + 1e-3 * MDH_loss(pred_disp_l, pred_disp_r)
-    loss = tf.reduce_sum(loss_func(left_image, right_image, pred_disp_l))
+    loss = loss_func(left_image, right_image, pred_disp_l, pred_disp_r)
+    regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+    # print regularization_losses
+    loss = tf.add_n([loss] + regularization_losses)
+    avg_loss = tf.reduce_mean(loss)
 #    loss = loss_func_v1(left_image, right_image, pred_disp_l)
-    tf.summary.scalar('loss: ', loss)
 
     global_step = tf.Variable(0, name='global_step', trainable=False)
+
+    # loss_avg
+    ema = tf.train.ExponentialMovingAverage(model.MOVING_AVERAGE_DECAY, global_step)
+    # keep moving average for loss
+    tf.add_to_collection(model.UPDATE_OPS_COLLECTION, ema.apply([loss]))
+
+    batchnorm_updates = tf.get_collection(model.UPDATE_OPS_COLLECTION)
+    batchnorm_updates_op = tf.group(*batchnorm_updates)
+
+    tf.summary.scalar('loss: ', loss)
     learning_rate = initial_lr
     optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate)
-    weights = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='first_part|second_part|third_part')
+    weights = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='siamese|3d_conv|refinement')
     grads = optimizer.compute_gradients(loss, var_list=weights)
 #    grads, variables = zip(*optimizer.compute_gradients(loss, var_list=weights))
 #    grads, global_norm = tf.clip_by_global_norm(grads, 5)
     train_op = optimizer.apply_gradients(grads, global_step=global_step)
-
+    train = tf.group(train_op, batchnorm_updates_op)
 
     saver = tf.train.Saver()
     summary_op = tf.summary.merge_all()
@@ -293,7 +330,7 @@ def main(argv=None):
 #            print gradient
 #            plt.imshow(scaled_disp.eval(session=sess))
 #            plt.show()
-            summary, _, loss_value, glb_step = sess.run([summary_op, train_op, loss, global_step], feed_dict=feed_dict)
+            summary, _, loss_value, glb_step = sess.run([summary_op, train, avg_loss, global_step], feed_dict=feed_dict)
 #            loss_g, loss_value, glb_step = sess.run([loss_graph, loss, global_step], feed_dict=feed_dict)
 #            print(loss_g)
 #            print '3.'
