@@ -21,23 +21,23 @@ max_disparity = p.max_disparity
 batch_size = p.batch_size
 
 initial_lr = 1e-4
-iterations = 60000
+iterations = 40000
 
 data_record = ["/home/new/Documents/Stereo-Matching/fly_train.tfrecords", "/home/new/Documents/Stereo-Matching/fly_test.tfrecords"]
 
 train_dir = 'lr_consistency/'
 
 
-def loss_func(left_input, right_input, disp_map_l, disp_map_r):
+def loss_func(left_input, right_input, disp_map_l):
     disp_map_l = disp_map_l / target_width
-    disp_map_r = disp_map_r / target_width
+    # disp_map_r = disp_map_r / target_width
     left_reconstructed = bilinear_sampler_1d_h(right_input, -disp_map_l)
-    right_reconstructed = bilinear_sampler_1d_h(left_input, disp_map_r)
+    # right_reconstructed = bilinear_sampler_1d_h(left_input, disp_map_r)
     # right_to_left_disp = bilinear_sampler_1d_h(disp_map_r, -disp_map_l)
     # left_to_right_disp = bilinear_sampler_1d_h(disp_map_l, disp_map_r)
 #    print("reconstruct ok")
     left_wlcn = tf.abs(wlcn(left_input, left_reconstructed))
-    right_wlcn = tf.abs(wlcn(right_input, right_reconstructed))
+    # right_wlcn = tf.abs(wlcn(right_input, right_reconstructed))
     # left_second_wlcn = tf.abs(wlcn(left_input, left_second_warp))
     # right_second_wlcn = tf.abs(wlcn(right_input, right_second_warp))
     # count = 0
@@ -87,20 +87,20 @@ def loss_func(left_input, right_input, disp_map_l, disp_map_r):
         left_loss.append(left_wlcn_slice)
     left_loss = tf.stack(left_loss)
 
-    right_wlcn_slices = tf.unstack(right_wlcn, axis=0)
-    right_loss = []
-    shape = right_wlcn_slices[0].get_shape().as_list()
-    for item in right_wlcn_slices:
-        item = tf.reshape(item, [1, shape[0], shape[1], shape[2]])
-        right_wlcn_slice = tf.nn.conv2d(item, guassian_filter, [1, 1, 1, 1], padding='SAME')
-        right_wlcn_slice = tf.squeeze(right_wlcn_slice, axis=0)
-        # left_wlcn_slice = (left_wlcn_slice - tf.reduce_min(left_wlcn_slice)) / (tf.reduce_max(left_wlcn_slice) - tf.reduce_min(left_wlcn_slice))
-        right_loss.append(right_wlcn_slice)
-    right_loss = tf.stack(right_loss)
+    # right_wlcn_slices = tf.unstack(right_wlcn, axis=0)
+    # right_loss = []
+    # shape = right_wlcn_slices[0].get_shape().as_list()
+    # for item in right_wlcn_slices:
+    #     item = tf.reshape(item, [1, shape[0], shape[1], shape[2]])
+    #     right_wlcn_slice = tf.nn.conv2d(item, guassian_filter, [1, 1, 1, 1], padding='SAME')
+    #     right_wlcn_slice = tf.squeeze(right_wlcn_slice, axis=0)
+    #     # left_wlcn_slice = (left_wlcn_slice - tf.reduce_min(left_wlcn_slice)) / (tf.reduce_max(left_wlcn_slice) - tf.reduce_min(left_wlcn_slice))
+    #     right_loss.append(right_wlcn_slice)
+    # right_loss = tf.stack(right_loss)
 #    print(loss)
 #     lr_left_loss = tf.reduce_mean(tf.abs(right_to_left_disp - disp_map_l))
 #     lr_right_loss = tf.reduce_mean(tf.abs(left_to_right_disp - disp_map_r))
-    return tf.reduce_mean(left_loss) + tf.reduce_mean(right_loss)
+    return tf.reduce_mean(left_loss)
 
 
 # Weighted Local Contrast Normalization
@@ -267,15 +267,15 @@ def main(argv=None):
     right_image = tf.placeholder(tf.float32, [batch_size, target_height, target_width, 3])
     phase = tf.placeholder(tf.bool)
 
-    pred_disp_l, pred_disp_r = model.stereonet(left_image, right_image)
+    pred_disp_l = model.stereonet(left_image, right_image)
 
 #    pred_disp_r = pred_disp_r / target_width
 #    loss_graph = loss_func(left_image, right_image, scaled_disp)
 #    loss = unary_loss(left_image, right_image, pred_disp_l, pred_disp_r) + consistency_loss(left_image, right_image, pred_disp_l, pred_disp_r) + 1e-3 * regularization_loss(left_image, right_image, pred_disp_l, pred_disp_r) + 1e-3 * MDH_loss(pred_disp_l, pred_disp_r)
-    loss = loss_func(left_image, right_image, pred_disp_l, pred_disp_r)
+    loss = loss_func(left_image, right_image, pred_disp_l)
     regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
     # print regularization_losses
-    loss = tf.add_n([loss] + regularization_losses)
+    #loss = tf.add_n([loss] + regularization_losses)
     avg_loss = tf.reduce_mean(loss)
 #    loss = loss_func_v1(left_image, right_image, pred_disp_l)
 
