@@ -282,6 +282,7 @@ def stereonet(image_l, image_r):
         for i in range(4):
             with tf.variable_scope('3d_conv' + str(i + 1)):
                 left_cost_volumn = conv3d(left_cost_volumn, 32, 1, 1)
+                left_cost_volumn = tf.nn.leaky_relu(bn(left_cost_volumn, is_training))
         with tf.variable_scope('3d_conv5'):
             left_cost_volumn = conv3d(left_cost_volumn, 1, 1, 1)
         # scope.reuse_variables()

@@ -21,7 +21,7 @@ max_disparity = p.max_disparity
 batch_size = p.batch_size
 
 initial_lr = 1e-4
-iterations = 40000
+iterations = 60000
 
 data_record = ["/home/new/Documents/Stereo-Matching/fly_train.tfrecords", "/home/new/Documents/Stereo-Matching/fly_test.tfrecords"]
 
