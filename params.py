@@ -9,7 +9,7 @@ class Params():
 
         self.channels = 3
 
-        self.max_disparity = 192
+        self.max_disparity = 144
 
         self.enqueue_many_size = 200
 

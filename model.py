@@ -3,7 +3,7 @@ from tensorflow.python.training import moving_averages
 from tensorflow.python.ops import control_flow_ops
 import numpy as np
 import params
-import bilinear_sampler
+from bilinear_sampler import *
 
 p = params.Params()
 MOVING_AVERAGE_DECAY = 0.99
@@ -130,7 +130,8 @@ def siamese_network(img, is_training):
             with tf.variable_scope('2dconv' + str(i + 1)):
                 img = conv2d(img, 32, 2, 1)
                 img = bn(img, is_training)
-        img = conv2d(img, 32, 1, 1)
+        with tf.variable_scope('2dconv4'):
+            img = conv2d(img, 32, 1, 1)
 
     return img
 
@@ -276,46 +277,74 @@ def stereonet(image_l, image_r):
         # print left_siamese
     constant_disp_shape = left_siamese.get_shape().as_list()
     left_cost_volumn = cost_volume(left_siamese, right_siamese)
-    # right_cost_volumn = cost_volume_v2(left_siamese, right_siamese)
+    right_cost_volumn = cost_volume_v2(left_siamese, right_siamese)
 
     with tf.variable_scope('3d_conv') as scope:
-        for i in range(4):
-            with tf.variable_scope('3d_conv' + str(i + 1)):
-                left_cost_volumn = conv3d(left_cost_volumn, 32, 1, 1)
-                left_cost_volumn = tf.nn.leaky_relu(bn(left_cost_volumn, is_training))
-        with tf.variable_scope('3d_conv5'):
-            left_cost_volumn = conv3d(left_cost_volumn, 1, 1, 1)
-        # scope.reuse_variables()
-        # for i in range(4):
-        #     with tf.variable_scope('3d_conv' + str(i + 1)):
-        #         right_cost_volumn = conv3d(right_cost_volumn, 32, 1, 1)
-        # with tf.variable_scope('3d_conv5'):
-        #     right_cost_volumn = conv3d(right_cost_volumn, 1, 1, 1)
 
-        disparity_volume = tf.reshape(tf.tile(tf.expand_dims(tf.range(1, disparity_range + 1), axis=1), [1, constant_disp_shape[1] * constant_disp_shape[2] * left_cost_volumn.get_shape().as_list()[-1]]), [1, -1])
-        disparity_volume = tf.reshape(tf.tile(disparity_volume, [batch_size, 1]), left_cost_volumn.get_shape().as_list())
+        with tf.variable_scope('3d_conv1'):
+            left_cost1 = conv3d(left_cost_volumn, 32, 1, 1)
+            left_cost1 = tf.nn.leaky_relu(bn(left_cost1, is_training))
+        with tf.variable_scope('3d_conv2'):
+            left_cost2 = conv3d(left_cost1, 32, 1, 1)
+            left_cost2 = tf.nn.leaky_relu(bn(left_cost2, is_training))
+        with tf.variable_scope('3d_conv3'):
+            left_cost3 = conv3d(left_cost2, 32, 1, 1)
+            left_cost3 = tf.nn.leaky_relu(bn(left_cost3, is_training))
+        with tf.variable_scope('3d_conv4'):
+            left_cost4 = conv3d(left_cost3, 32, 1, 1)
+            left_cost4 = tf.nn.leaky_relu(bn(left_cost4, is_training))
+        left_cost2 = left_cost2 + left_cost4
+        with tf.variable_scope('3d_conv5'):
+            left_cost5 = conv3d(left_cost2, 32, 1, 1)
+            left_cost5 = tf.nn.leaky_relu(bn(left_cost5, is_training))
+        with tf.variable_scope('3d_conv6'):
+            left_cost6 = conv3d(left_cost5, 1, 1, 1)
+
+        scope.reuse_variables()
+        with tf.variable_scope('3d_conv1'):
+            right_cost1 = conv3d(right_cost_volumn, 32, 1, 1)
+            right_cost1 = tf.nn.leaky_relu(bn(right_cost1, is_training))
+        with tf.variable_scope('3d_conv2'):
+            right_cost2 = conv3d(right_cost1, 32, 1, 1)
+            right_cost2 = tf.nn.leaky_relu(bn(right_cost2, is_training))
+        with tf.variable_scope('3d_conv3'):
+            right_cost3 = conv3d(right_cost2, 32, 1, 1)
+            right_cost3 = tf.nn.leaky_relu(bn(right_cost3, is_training))
+        with tf.variable_scope('3d_conv4'):
+            right_cost4 = conv3d(right_cost3, 32, 1, 1)
+            right_cost4 = tf.nn.leaky_relu(bn(right_cost4, is_training))
+        right_cost2 = right_cost2 + right_cost4
+        with tf.variable_scope('3d_conv5'):
+            right_cost5 = conv3d(right_cost2, 32, 1, 1)
+            right_cost5 = tf.nn.leaky_relu(bn(right_cost5, is_training))
+        with tf.variable_scope('3d_conv6'):
+            right_cost6 = conv3d(right_cost5, 1, 1, 1)
+
+        disparity_volume = tf.reshape(tf.tile(tf.expand_dims(tf.range(1, disparity_range + 1), axis=1), [1, constant_disp_shape[1] * constant_disp_shape[2] * left_cost6.get_shape().as_list()[-1]]), [1, -1])
+        disparity_volume = tf.reshape(tf.tile(disparity_volume, [batch_size, 1]), left_cost6.get_shape().as_list())
 
         new_batch_slice_left = []
-        # new_batch_slice_right = []
-        batch_slice_left = tf.unstack(left_cost_volumn, axis=0)
-        # batch_slice_right = tf.unstack(right_cost_volumn, axis=0)
+        new_batch_slice_right = []
+        batch_slice_left = tf.unstack(left_cost6, axis=0)
+        batch_slice_right = tf.unstack(right_cost6, axis=0)
 
         for item in batch_slice_left:
             new_batch_slice_left.append(tf.nn.softmax(-item, axis=0))
-        # for item in batch_slice_right:
-        #     new_batch_slice_right.append(tf.nn.softmax(-item, axis=0))
+        for item in batch_slice_right:
+            new_batch_slice_right.append(tf.nn.softmax(-item, axis=0))
 
         disp_map_l = tf.reduce_sum(tf.to_float(disparity_volume) * tf.stack(new_batch_slice_left, axis=0), axis=1)
-        # disp_map_r = tf.reduce_sum(tf.to_float(disparity_volume) * tf.stack(new_batch_slice_right, axis=0), axis=1)
+        disp_map_r = tf.reduce_sum(tf.to_float(disparity_volume) * tf.stack(new_batch_slice_right, axis=0), axis=1)
         new_shape = disp_map_l.get_shape().as_list()
         new_shape[1] *= 8
         new_shape[2] *= 8
         disp_map_l_upsampled = tf.image.resize_images(disp_map_l, [new_shape[1], new_shape[2]])
-        # disp_map_r_upsampled = tf.image.resize_images(disp_map_r, [new_shape[1], new_shape[2]])
+        disp_map_r_upsampled = tf.image.resize_images(disp_map_r, [new_shape[1], new_shape[2]])
+
 
     with tf.variable_scope('refinement') as scope:
 
-        with tf.variable_scope('lbranch1'):
+        with tf.variable_scope('branch1'):
             input_left = conv2d(image_l, 16, 1, 1)
             input_left = bn(input_left, is_training)
             input_left = tf.nn.leaky_relu(input_left)
@@ -324,7 +353,7 @@ def stereonet(image_l, image_r):
             with tf.variable_scope('res2'):
                 input_left = residual_block(input_left, 16, 1, 2, is_training)
 
-        with tf.variable_scope('lbranch2'):
+        with tf.variable_scope('branch2'):
             left_disp = conv2d(disp_map_l_upsampled, 16, 1, 1)
             left_disp = bn(left_disp, is_training)
             left_disp = tf.nn.leaky_relu(left_disp)
@@ -333,7 +362,7 @@ def stereonet(image_l, image_r):
             with tf.variable_scope('res2'):
                 left_disp = residual_block(left_disp, 16, 1, 2, is_training)
 
-        with tf.variable_scope('lmerge'):
+        with tf.variable_scope('merge'):
             layer = tf.concat([input_left, left_disp], axis=-1)
             with tf.variable_scope('res1'):
                 layer = residual_block(layer, 32, 1, 4, is_training)
@@ -344,35 +373,35 @@ def stereonet(image_l, image_r):
                     layer = residual_block(layer, 32, 1, 1, is_training)
             left_res = conv2d(layer, 1, 1, 1)
 
-        # scope.reuse_variables()
+        scope.reuse_variables()
 
-        # with tf.variable_scope('rbranch1'):
-        #     input_right = conv2d(image_r, 16, 1, 1)
-        #     input_right = bn(input_right, is_training)
-        #     input_right = tf.nn.leaky_relu(input_right)
-        #     with tf.variable_scope('res1'):
-        #         input_right = residual_block(input_right, 16, 1, 1, is_training)
-        #     with tf.variable_scope('res2'):
-        #         input_right = residual_block(input_right, 16, 1, 2, is_training)
-        #
-        # with tf.variable_scope('rbranch2'):
-        #     right_disp = conv2d(disp_map_r_upsampled, 16, 1, 1)
-        #     right_disp = bn(right_disp, is_training)
-        #     right_disp = tf.nn.leaky_relu(right_disp)
-        #     with tf.variable_scope('res1'):
-        #         right_disp = residual_block(right_disp, 16, 1, 1, is_training)
-        #     with tf.variable_scope('res2'):
-        #         right_disp = residual_block(right_disp, 16, 1, 2, is_training)
-        #
-        # with tf.variable_scope('rmerge'):
-        #     layer = tf.concat([input_right, right_disp], axis=-1)
-        #     with tf.variable_scope('res1'):
-        #         layer = residual_block(layer, 32, 1, 4, is_training)
-        #     with tf.variable_scope('res2'):
-        #         layer = residual_block(layer, 32, 1, 8, is_training)
-        #     for i in range(2):
-        #         with tf.variable_scope('res' + str(i + 3)):
-        #             layer = residual_block(layer, 32, 1, 1, is_training)
-        #     right_res = conv2d(layer, 1, 1, 1)
+        with tf.variable_scope('branch1'):
+            input_right = conv2d(image_r, 16, 1, 1)
+            input_right = bn(input_right, is_training)
+            input_right = tf.nn.leaky_relu(input_right)
+            with tf.variable_scope('res1'):
+                input_right = residual_block(input_right, 16, 1, 1, is_training)
+            with tf.variable_scope('res2'):
+                input_right = residual_block(input_right, 16, 1, 2, is_training)
 
-    return tf.add(disp_map_l_upsampled, left_res)
+        with tf.variable_scope('branch2'):
+            right_disp = conv2d(disp_map_r_upsampled, 16, 1, 1)
+            right_disp = bn(right_disp, is_training)
+            right_disp = tf.nn.leaky_relu(right_disp)
+            with tf.variable_scope('res1'):
+                right_disp = residual_block(right_disp, 16, 1, 1, is_training)
+            with tf.variable_scope('res2'):
+                right_disp = residual_block(right_disp, 16, 1, 2, is_training)
+
+        with tf.variable_scope('merge'):
+            layer = tf.concat([input_right, right_disp], axis=-1)
+            with tf.variable_scope('res1'):
+                layer = residual_block(layer, 32, 1, 4, is_training)
+            with tf.variable_scope('res2'):
+                layer = residual_block(layer, 32, 1, 8, is_training)
+            for i in range(2):
+                with tf.variable_scope('res' + str(i + 3)):
+                    layer = residual_block(layer, 32, 1, 1, is_training)
+            right_res = conv2d(layer, 1, 1, 1)
+
+    return tf.add(disp_map_l_upsampled, left_res), tf.add(disp_map_r_upsampled, right_res)

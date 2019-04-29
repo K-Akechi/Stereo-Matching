@@ -20,7 +20,7 @@ import params
 
 p = params.Params()
 
-def bilinear_sampler_1d_h(input_images, x_offset, wrap_mode='border', name='bilinear_sampler', **kwargs):
+def bilinear_sampler_1d_h(input_images, x_offset, wrap_mode='border', name='bilinear_sampler', opt=3, **kwargs):
     def _repeat(x, n_repeats):
         with tf.variable_scope('_repeat'):
             rep = tf.tile(tf.expand_dims(x, 1), [1, n_repeats])
@@ -101,7 +101,9 @@ def bilinear_sampler_1d_h(input_images, x_offset, wrap_mode='border', name='bili
         _num_batch    = p.batch_size
         _height       = p.target_h
         _width        = p.target_w
-        _num_channels = p.channels
+        _num_channels = min(p.channels, opt)
+
+
 
         _height_f = tf.cast(_height, tf.float32)
         _width_f  = tf.cast(_width,  tf.float32)
