@@ -24,6 +24,22 @@ def get_gaussian_filter(kernel_shape):
 
     return x / sum
 
+def get_gaussian_filter_v2(kernel_shape):
+    x = np.zeros(kernel_shape, dtype='float32')
+    sum = 1
+
+
+    mid = np.floor(kernel_shape[1] / 2.)
+    for out_idx in range(0, kernel_shape[3]):
+        for kernel_idx in range(0, kernel_shape[2]):
+            for i in range(0, kernel_shape[0]):
+                for j in range(0, kernel_shape[1]):
+                    x[i, j, kernel_idx, out_idx] = 1. / (kernel_shape[0] * kernel_shape[1])
+                    if out_idx == 0:
+                        sum = np.sum(x)
+
+    return x / sum
+
 
 def LocalContrastNorm(image, radius=9):
     """
@@ -36,7 +52,7 @@ def LocalContrastNorm(image, radius=9):
 
     n, h, w, c = image.shape[0], image.shape[1], image.shape[2], image.shape[3]
     image = tf.pad(image, [[0, 0], [radius // 2, radius // 2], [radius // 2, radius // 2], [0, 0]])
-    gaussian_filter = tf.convert_to_tensor(get_gaussian_filter((radius, radius, c, 3)))
+    gaussian_filter = tf.convert_to_tensor(get_gaussian_filter_v2((radius, radius, c, 3)))
     filtered_out = tf.nn.conv2d(image, gaussian_filter, [1, 1, 1, 1], padding='SAME')
     mid = int(np.floor(gaussian_filter.get_shape().as_list()[0] / 2.))
 
@@ -77,11 +93,12 @@ def read_and_decode(filename):
         })
 
     image_left = tf.decode_raw(features['img_left'], tf.uint8)
-    image_left = tf.reshape(image_left, [height, width, 3])
-    
-    image_right = tf.decode_raw(features['img_right'], tf.uint8)
-    image_right = tf.reshape(image_right, [height, width, 3])
+    image_left = tf.reshape(image_left, [height, width, 1])
+    image_left = tf.tile(image_left, [1, 1, 3])
 
+    image_right = tf.decode_raw(features['img_right'], tf.uint8)
+    image_right = tf.reshape(image_right, [height, width, 1])
+    image_right = tf.tile(image_right, [1, 1, 3])
 
     #    disparity = tf.decode_raw(features['disparity'], tf.float32)
     #    disparity = tf.reshape(disparity, [height, width, 1])

@@ -404,4 +404,4 @@ def stereonet(image_l, image_r):
                     layer = residual_block(layer, 32, 1, 1, is_training)
             right_res = conv2d(layer, 1, 1, 1)
 
-    return tf.add(disp_map_l_upsampled, left_res), tf.add(disp_map_r_upsampled, right_res)
+    return disp_map_l_upsampled, disp_map_r_upsampled, tf.add(disp_map_l_upsampled, left_res), tf.add(disp_map_r_upsampled, right_res)

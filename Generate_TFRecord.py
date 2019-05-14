@@ -56,15 +56,16 @@ def rgba_to_rgb(img):
 
 
 # cwd = os.getcwd()
-dirs = ['/media/new/Seagate Backup Plus Drive/frames_cleanpass/',
-        '/media/new/Seagate Backup Plus Drive/frames_disparity/']
+dirs = ['/home/new/Documents/Stereo-Matching/dataset/',
+        '/home/new/Seagate Backup Plus Drive/frames_disparity/']
 
-writer_tr = tf.python_io.TFRecordWriter("fly_train.tfrecords")
-writer_ts = tf.python_io.TFRecordWriter("fly_test.tfrecords")
+writer_tr = tf.python_io.TFRecordWriter("realsense_train.tfrecords")
+writer_ts = tf.python_io.TFRecordWriter("realsense_test.tfrecords")
 
 count = 0
 for phase in ['TRAIN', 'TEST']:
-    for group in ['A', 'B', 'C']:
+    # for group in ['A', 'B', 'C']:
+    for group in ['A']:
         dir_group = dirs[0] + phase + '/' + group
         # dir_group2 = dirs[1] + phase + '/' + group
         for img_group in os.listdir(dir_group):

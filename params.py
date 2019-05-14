@@ -2,10 +2,10 @@ class Params():
     def __init__(self):
         self.batch_size = 1
         self.target_h = 256
-        self.target_w = 768
+        self.target_w = 1024
 
-        self.original_h = 540
-        self.original_w = 960
+        self.original_h = 720
+        self.original_w = 1280
 
         self.channels = 3
 
