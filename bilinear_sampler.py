@@ -92,7 +92,7 @@ def bilinear_sampler_1d_h(input_images, x_offset, wrap_mode='border', name='bili
             return output
 
     with tf.variable_scope(name):
-        '''
+
         _num_batch    = tf.shape(input_images)[0]
         _height       = tf.shape(input_images)[1]
         _width        = tf.shape(input_images)[2]
@@ -102,8 +102,7 @@ def bilinear_sampler_1d_h(input_images, x_offset, wrap_mode='border', name='bili
         _height       = p.target_h
         _width        = p.target_w
         _num_channels = min(p.channels, opt)
-	
-
+        '''
 
         _height_f = tf.cast(_height, tf.float32)
         _width_f  = tf.cast(_width,  tf.float32)
